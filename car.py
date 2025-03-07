@@ -16,6 +16,7 @@ class Car:
         # VAR
         self.pos = py.math.Vector2(pos)
         self.vel = py.math.Vector2(vel)
+        self.max_vel = 15
         self.acc = acc
         self.angle = angle
         self.next_coin = 0
@@ -52,6 +53,11 @@ class Car:
     def move(self, direction):
         self.vel.x += math.sin(math.radians(self.angle)) * self.acc * direction
         self.vel.y += math.cos(math.radians(self.angle)) * self.acc * direction
+        self.vel.x = max(-self.max_vel, min(self.vel.x, self.max_vel))
+        self.vel.y = max(-self.max_vel, min(self.vel.y, self.max_vel))
+
+    def break_speed(self):
+        self.vel *= 0.8
 
     def turn(self, direction):
         radius = 30
@@ -67,12 +73,17 @@ class Car:
 
     def handle_action(self, action, track_mask, coins):
         # [UP, DOWN, LEFT, RIGHT]
-        if np.array_equal([1, 0, 0], action):
-            self.move(-1)
-        if np.array_equal([0, 1, 0], action):
-            self.turn(1)
-        if np.array_equal([0, 0, 1], action):
-            self.turn(-1)
+        match action:
+            case 0:
+                self.move(-1)
+            case 1:
+                self.turn(1)
+            case 2:
+                self.turn(-1)
+            case 3:
+                self.break_speed()
+            case 4:
+                pass
 
         self.update()
         reward = 0
@@ -80,11 +91,11 @@ class Car:
 
         collided = self.check_collision(track_mask)
         if collided:
-            reward = -self.ml_factor * 100
+            reward = -self.ml_factor
             game_over = True
-        elif self.timer <= 0:
-            reward = -self.ml_factor * 100
-            game_over = True
+        # elif self.timer <= 0:
+        #     reward = -self.ml_factor
+        #     game_over = True
         else:
             reward = self.collect_coin(coins)
         self.score += reward
@@ -117,10 +128,10 @@ class Car:
             self.timer = TIMER
             self.next_coin = (self.next_coin + 1) % len(coins)
             return self.ml_factor
-        return -self.ml_factor * 0.1
+        return 0
 
     def generate_sensors(self, screen=None, lines=None):
-        for i in range(90, 180+90+30, 30):
+        for i in range(0, 360, 30):
             size = 200
             start_point = self.pos + self.size / 2
             endpoint = (

@@ -8,18 +8,17 @@ import os
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Linear_QNet(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size, output_size, batch_size):
         super().__init__()
-        self.linear1 = nn.Linear(input_size,hidden_size)
-        self.linear2 = nn.Linear(hidden_size,hidden_size)
-        self.linear3 = nn.Linear(hidden_size,output_size)
+        self.linear1 = nn.Linear(input_size,256)
+        self.linear2 = nn.Linear(256,output_size)
+        self.batch_size = batch_size
         self.model_folder_path = f'./model/{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
 
         
     def forward(self, x):
         x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = self.linear3(x)
+        x = self.linear2(x)
         return x
     
     def save(self, file_name='model.pth'):
@@ -29,12 +28,13 @@ class Linear_QNet(nn.Module):
         torch.save(self.state_dict(), file_name)
 
 class QTrainer:
-    def __init__(self, model, lr, gamma):
+    def __init__(self, model_target, model_eval, lr, gamma):
         self.lr = lr
         self.gamma = gamma
-        self.model = model
-        self.optimizer = optim.Adam(model.parameters(), lr=self.lr)
+        self.model_target = model_target
+        self.model_eval = model_eval
         self.criterion = nn.MSELoss()
+        self.optimizer = optim.Adam(self.model_eval.parameters(), lr=lr)
 
 
     def train_step(self, state, action, reward, next_state, done):
@@ -51,20 +51,26 @@ class QTrainer:
             done = (done, )
 
         # 1: predicted Q values with current state
-        pred = self.model(state)
+        q_next = self.model_target(next_state)
+        q_eval = self.model_eval(next_state) 
+        q_pred = self.model_eval(state)
 
-        target = pred.clone()
+        max_actions = torch.argmax(q_eval, axis=1)
+
+        q_target = q_pred.clone()
 
         for idx in range(len(done)):
             Q_new = reward[idx]
             if not done[idx]:
-                Q_new = reward[idx] + self.gamma * torch.max(self.model(next_state[idx]))
+                Q_new = reward[idx] + self.gamma * q_next[idx, max_actions[idx]].item()  # Ensure Q_new is a scalar
 
-            target[idx][torch.argmax(action[idx]).item()] = Q_new
+            action_idx = action[idx].item()
+            q_target[idx][action_idx] = Q_new  # Q_new should be a scalar here
+
 
         # 2: Q_new = r + y * max(next_predicted Q value) -> only do this if not done
-        self.optimizer.zero_grad()
-        loss = self.criterion(target, pred)
-        loss.backward()
+        loss = self.criterion(q_pred, q_target)
 
+        self.optimizer.zero_grad()
+        loss.backward()
         self.optimizer.step()

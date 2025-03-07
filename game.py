@@ -16,8 +16,6 @@ class Game:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 20)
 
-        car = Car()
-
         self.track = pygame.transform.scale(pygame.image.load("track.png"), (1600, 900))
         self.track_mask = pygame.mask.from_surface(self.track)
         self.mask_image = self.track_mask.to_surface()
@@ -38,24 +36,22 @@ class Game:
         self.screen.blit(self.track, (0, 0))
 
         for i, c in enumerate(self.coins):
-            if i == car.next_coin:
-                pygame.draw.circle(self.screen, "yellow", c, 20)
-                text = self.font.render(str(i), True, "black")
-                text_rect = text.get_rect(center=c)
-                self.screen.blit(text, text_rect)
-                break
+            pygame.draw.circle(self.screen, "yellow", c, 20)
+            text = self.font.render(str(i), True, "black")
+            text_rect = text.get_rect(center=c)
+            self.screen.blit(text, text_rect)
 
 
     def get_state(self, car):
         state =  np.concatenate((
                 # np.array([car.pos.x, car.pos.y]),
-                # np.array([car.vel.x, car.vel.y]),
+                np.array([car.vel.x/car.max_vel, car.vel.y/car.max_vel]),
                 # np.array([car.acc]),
                 # np.array([car.angle]),
                 # np.array([car.dead]),
                 # np.array([car.score]),
-                np.array([euchlidean_distance(self.coins[car.next_coin], (car.pos+car.size/2))]),
-                np.array([euchlidean_distance(v, (car.pos+car.size/2)) if v else 201 for v in car.sensors.values()])
+                np.array([(200-euchlidean_distance(self.coins[car.next_coin], car.pos+car.size/2)/200)]),
+                np.array([(250-euchlidean_distance(v, (car.pos+car.size/2)))/250 if v else 250 for v in car.sensors.values()])
                 ))
         return state
 
@@ -82,5 +78,6 @@ class Game:
         
 if __name__ == "__main__":
     game = Game(local=True)
+    car = Car()
     while game.running:
-        game.run()
+        game.run(car)
